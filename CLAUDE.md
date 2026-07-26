@@ -82,7 +82,8 @@ npm run dev
 │   └── package.json
 ├── data/                                  # CSV data storage
 │   ├── configs.csv                        # Pipeline configurations
-│   ├── creators.csv                       # Instagram creator accounts
+│   ├── from APi
+                       # Instagram creator accounts
 │   └── videos.csv                         # Analyzed video results
 ├── context/                               # Background context for Claude
 ├── plans/                                 # Implementation plans

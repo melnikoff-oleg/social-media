@@ -21,7 +21,7 @@ const components: Components = {
     </h3>
   ),
   p: ({ children }) => (
-    <p className="mb-3 text-sm leading-relaxed text-foreground/70 last:mb-0">
+    <p className="mb-3 text-sm leading-relaxed text-foreground/90 last:mb-0">
       {children}
     </p>
   ),
@@ -32,19 +32,19 @@ const components: Components = {
     <ol className="mb-3 space-y-1.5 pl-1 list-decimal list-inside last:mb-0">{children}</ol>
   ),
   li: ({ children }) => (
-    <li className="text-sm leading-relaxed text-foreground/70 flex gap-2">
-      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-purple-400/60" />
+    <li className="text-sm leading-relaxed text-foreground/85 flex gap-2">
+      <span className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full bg-orange-400/60" />
       <span>{children}</span>
     </li>
   ),
   strong: ({ children }) => (
-    <strong className="font-semibold text-foreground/90">{children}</strong>
+    <strong className="font-semibold text-foreground">{children}</strong>
   ),
   em: ({ children }) => (
-    <em className="text-foreground/60 italic">{children}</em>
+    <em className="text-foreground/80 italic">{children}</em>
   ),
   blockquote: ({ children }) => (
-    <blockquote className="mb-3 border-l-2 border-purple-500/30 pl-4 text-foreground/60 italic">
+    <blockquote className="mb-3 border-l-2 border-orange-500/30 pl-4 text-foreground/80 italic">
       {children}
     </blockquote>
   ),
@@ -52,19 +52,19 @@ const components: Components = {
     const isBlock = className?.includes("language-");
     if (isBlock) {
       return (
-        <code className="block mb-3 rounded-xl bg-black/30 border border-white/[0.04] p-4 text-xs font-mono text-foreground/80 overflow-x-auto">
+        <code className="block mb-3 rounded-xl bg-foreground/[0.03] border border-border/40 p-4 text-xs font-mono text-foreground/80 overflow-x-auto">
           {children}
         </code>
       );
     }
     return (
-      <code className="rounded-md bg-white/[0.06] px-1.5 py-0.5 text-xs font-mono text-purple-300">
+      <code className="rounded-md bg-foreground/[0.06] px-1.5 py-0.5 text-xs font-mono text-orange-600 dark:text-orange-300">
         {children}
       </code>
     );
   },
   hr: () => (
-    <hr className="my-5 border-white/[0.06]" />
+    <hr className="my-5 border-border/30" />
   ),
 };
 
@@ -80,7 +80,7 @@ export function MarkdownContent({ content, variant = "analysis" }: MarkdownConte
     );
   }
 
-  const accentColor = variant === "analysis" ? "purple" : "indigo";
+  const accentColor = variant === "analysis" ? "orange" : "orange";
 
   return (
     <div className={`prose-custom accent-${accentColor}`}>
