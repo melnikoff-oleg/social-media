@@ -10,7 +10,7 @@ Full walkthrough: **[oleg.ae/claude-reels](https://oleg.ae/claude-reels)**
 
 ## Setup
 
-You need [Node.js](https://nodejs.org) (LTS) and three API keys.
+You need [Node.js](https://nodejs.org) (LTS), [Docker Desktop](https://www.docker.com/products/docker-desktop/) (for the local PostgreSQL) and three API keys.
 
 ```bash
 # 1. get the code
@@ -22,13 +22,53 @@ cp .env.example .env        # Windows PowerShell: Copy-Item .env.example .env
 
 # 3. open .env and paste your three keys in
 
-# 4. install and run
+# 4. start the local PostgreSQL (from the project root)
+docker compose up -d db
+#    and create the test database once (used only by the test suite)
+docker compose exec db createdb -U app social_media_test
+
+# 5. install, create the tables, create your first account, run
 cd app
 npm install
+npm run db:migrate
+npm run create-user -- --email you@example.com --name "Your Name" --role admin
 npm run dev
 ```
 
-Then open http://localhost:3000
+Then open http://localhost:3000 and sign in. There is no public sign-up: accounts are created from the command line (below). The API keys are server-side only; users never see or enter them.
+
+### Database and ports
+
+PostgreSQL runs in Docker (`docker-compose.yml`) and is published on **host port 5435**, bound to 127.0.0.1. Port 5435 is used on purpose: 5432 is already taken by another container on the owner's machine. `.env.example` has the matching `DATABASE_URL` (the app) and `TEST_DATABASE_URL` (a separate `social_media_test` database used only by the test suite). If 5435 is busy on your machine, change the host port in `docker-compose.yml` and in both URLs in `.env`.
+
+`db:migrate` and the account scripts load `DATABASE_URL` from the root `.env` themselves, so nothing needs to be exported in your shell.
+
+### Commands (run from `app/`)
+
+| Command | What it does |
+|---|---|
+| `docker compose up -d db` | start the local PostgreSQL (run from the project root) |
+| `npm run db:migrate` | apply the SQL migrations in `app/drizzle` to `DATABASE_URL` |
+| `npm run db:generate` | generate a new migration after changing `src/lib/db/schema.ts` |
+| `npm run create-user -- --email <e> --name "<n>" --role admin\|user [--password <pw>]` | create an account (new non-admin accounts get a copy of the starter content) |
+| `npm run reset-password -- --email <e> [--password <pw>]` | set a new password |
+| `npm run disable-user -- --email <e>` | block login for the account (data is kept) |
+| `npm run enable-user -- --email <e>` | allow login again |
+| `npm run delete-user -- --email <e>` | delete the account and its data |
+| `npm run migrate:csv -- --owner-email <e> [--data-dir <dir>]` | one-time import of the old `data/*.csv` into that account (reads the CSVs, never writes them) |
+| `npm test` | run the test suite (`vitest run`; uses `TEST_DATABASE_URL`) |
+
+Admins get an **Admin** page (`/admin`) to set each account's run and video quotas, deactivate accounts and act on other accounts' data; those actions are written to the `admin_audit` table. Admins have no quota themselves.
+
+Each account can hold at most 50 creators, and "refresh" skips a creator whose stats were fetched less than 10 minutes ago, to keep Apify spend under control.
+
+### Manual checklist (run by hand with two test accounts, A and B)
+
+- [ ] A cannot see B's configs, creators or videos (and the other way round).
+- [ ] The admin sees and edits the data of A and B from the admin panel, and each change shows up in `admin_audit`.
+- [ ] A's run quota runs out and the screen says so.
+- [ ] A deactivated account cannot log in.
+- [ ] The image proxy refuses a domain that is not on the allowed list (only `*.cdninstagram.com` and `*.fbcdn.net` over https).
 
 ### The three keys
 
@@ -162,17 +202,37 @@ The free Apify plan gives $5 of usage a month and it does not roll over. Most so
 3. **Watch** — uploads the top videos to Gemini, which describes what actually happens in them
 4. **Generate** — Claude turns the patterns into new concepts written for your brand
 
-Everything runs locally. `.env` never leaves your machine.
+Everything runs locally (the app, plus a PostgreSQL in Docker). `.env` never leaves your machine.
+
+## Known issues
+
+- **Intermittent vitest failure (open, cause not confirmed).** The full suite once finished with 141 of 153 tests passing instead of 153/153, and passed on the next run. A second occurrence (31 failed, 122 passed) happened on 2026-11-07 while another vitest process was starting against the same test database; the errors were `duplicate key ... users_email_unique (a@x.com)` and foreign-key violations on `user_id`, which is what two runs sharing one database look like. Suspected cause: concurrent runs (or leftover processes) sharing `TEST_DATABASE_URL`. The immediate re-run, with nothing else running, passed 153/153. If it happens, make sure no other `vitest` process is running, re-run once, and note the failing test names (seen so far: `pipeline/runs.test.ts`, `quota.test.ts`, `api/pipeline/route.test.ts`, `admin.test.ts`, `auth-routes.test.ts`, `starter.test.ts`, `isolation.test.ts`, `account.test.ts`). The tests were deliberately not changed to hide it.
+- **vitest does not read `.env`.** Export `TEST_DATABASE_URL` in the shell before `npx vitest run`, otherwise every database test fails with "DATABASE_URL is not set".
+
+## Security notes and deferred items (for the VPS stage)
+
+The app is built for local use. These are known and accepted for now, and must be handled before putting it on a server:
+
+- **R1.** The pipeline video download accepts any host returned by Apify and follows default redirects.
+- **R2.** Neither the image proxy nor the pipeline video download caps the response size.
+- **R3.** DNS rebinding, or an allowed hostname that resolves to a private IP, is out of scope for the local build (the proxy checks the hostname only).
+- An admin can deactivate another admin: there is no "last active admin" guard.
+- A run's quota is not refunded when individual videos fail.
+- The `limitedTo` SSE event is not the first event of the pipeline stream.
 
 ## Project layout
 
 ```
-.env.example        the template for your keys
+.env.example        the template for your keys and database URLs
+docker-compose.yml  local PostgreSQL (host port 5435)
 app/                the Next.js app you actually use
+  drizzle/            SQL migrations
   src/lib/apify.ts    scraping
   src/lib/gemini.ts   video analysis
   src/lib/claude.ts   concept generation
-data/               your creators list and results, as CSV
+  src/lib/{db,auth,repo,quota,pipeline,accounts,api,client}   database, login, per-account data access, quotas, runs, starter copy, route and client helpers
+  src/scripts/        account commands and CSV migration
+data/               the old CSV data (only read by migrate:csv)
 CLAUDE.md           context Claude Code loads to work on this project
 shell-aliases.md    the cs / cr shortcuts explained
 ```

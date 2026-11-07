@@ -2,6 +2,24 @@
 
 import { createContext, useContext, useState, useRef, useCallback } from "react";
 import type { PipelineProgress } from "@/lib/types";
+import { readErrorCode, redirectToLogin } from "@/lib/client/api";
+
+export function limitedToMessage(n: number): string {
+  return `Limite diário de vídeos: analisando ${n} vídeos hoje`;
+}
+
+const failedProgress: PipelineProgress = {
+  status: "error",
+  phase: "done",
+  activeTasks: [],
+  creatorsCompleted: 0,
+  creatorsTotal: 0,
+  creatorsScraped: 0,
+  videosAnalyzed: 0,
+  videosTotal: 0,
+  errors: [],
+  log: [],
+};
 
 interface PipelineContextValue {
   running: boolean;
@@ -30,6 +48,22 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
         body: JSON.stringify(params),
         signal: abortRef.current.signal,
       });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          redirectToLogin();
+          return;
+        }
+        const code = await readErrorCode(response);
+        let message = "Não foi possível iniciar a execução";
+        if (response.status === 409) message = "Já existe uma execução em andamento";
+        else if (response.status === 429 && code === "runs_exhausted")
+          message = "Você atingiu o limite de execuções de hoje";
+        else if (response.status === 429 && code === "videos_exhausted")
+          message = limitedToMessage(0);
+        setProgress({ ...failedProgress, errors: [message] });
+        return;
+      }
 
       const reader = response.body?.getReader();
       if (!reader) return;

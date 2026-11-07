@@ -15,6 +15,7 @@ import {
 import { Badge } from "@/components/ui/badge";
 import { Plus, Pencil, Trash2, Settings2, Sparkles, Search, Users, Film } from "lucide-react";
 import type { Config, Creator, Video } from "@/lib/types";
+import { apiFetch, fetchList, readError } from "@/lib/client/api";
 
 const emptyConfig = {
   configName: "",
@@ -31,19 +32,28 @@ export default function ConfigsPage() {
   const [editing, setEditing] = useState<Config | null>(null);
   const [form, setForm] = useState(emptyConfig);
 
-  const loadConfigs = () => {
-    fetch("/api/configs").then((r) => r.json()).then(setConfigs);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const loadConfigs = async () => {
+    const r = await fetchList<Config>("/api/configs");
+    setConfigs(r.items);
+    setLoadError(r.error);
   };
 
   useEffect(() => {
-    loadConfigs();
-    fetch("/api/creators").then((r) => r.json()).then(setCreators);
-    fetch("/api/videos").then((r) => r.json()).then(setVideos);
+    fetchList<Config>("/api/configs").then((r) => {
+      setConfigs(r.items);
+      setLoadError(r.error);
+    });
+    fetchList<Creator>("/api/creators").then((r) => setCreators(r.items));
+    fetchList<Video>("/api/videos").then((r) => setVideos(r.items));
   }, []);
 
   const openNew = () => {
     setEditing(null);
     setForm(emptyConfig);
+    setSaveError(null);
     setDialogOpen(true);
   };
 
@@ -55,30 +65,44 @@ export default function ConfigsPage() {
       analysisInstruction: config.analysisInstruction,
       newConceptsInstruction: config.newConceptsInstruction,
     });
+    setSaveError(null);
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
-    if (editing) {
-      await fetch("/api/configs", {
-        method: "PUT",
+    setSaveError(null);
+    try {
+      const res = await apiFetch("/api/configs", {
+        method: editing ? "PUT" : "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ id: editing.id, ...form }),
+        body: JSON.stringify(editing ? { id: editing.id, ...form } : form),
       });
-    } else {
-      await fetch("/api/configs", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(form),
-      });
+      if (res.status === 401) return;
+      if (!res.ok) {
+        // 409 carries the duplicate-name message from the API.
+        setSaveError(await readError(res, "Não foi possível salvar"));
+        return;
+      }
+      setDialogOpen(false);
+      loadConfigs();
+    } catch {
+      setSaveError("Não foi possível salvar");
     }
-    setDialogOpen(false);
-    loadConfigs();
   };
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this config?")) return;
-    await fetch(`/api/configs?id=${id}`, { method: "DELETE" });
+    try {
+      const res = await apiFetch(`/api/configs?id=${id}`, { method: "DELETE" });
+      if (res.status === 401) return;
+      if (!res.ok) {
+        setLoadError(await readError(res, "Não foi possível excluir"));
+        return;
+      }
+    } catch {
+      setLoadError("Não foi possível excluir");
+      return;
+    }
     loadConfigs();
   };
 
@@ -147,6 +171,9 @@ export default function ConfigsPage() {
                   className="mt-1.5 rounded-xl glass border-white/[0.08] font-mono text-xs leading-relaxed"
                 />
               </div>
+              {saveError && (
+                <p role="alert" className="text-sm text-red-400">{saveError}</p>
+              )}
               <Button
                 onClick={handleSave}
                 className="w-full rounded-xl h-11 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 border-0"
@@ -157,6 +184,10 @@ export default function ConfigsPage() {
           </DialogContent>
         </Dialog>
       </div>
+
+      {loadError && (
+        <p role="alert" className="text-sm text-red-400">{loadError}</p>
+      )}
 
       {/* Config Cards */}
       <div className="grid gap-4">

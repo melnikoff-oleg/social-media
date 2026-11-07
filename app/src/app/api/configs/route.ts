@@ -1,44 +1,64 @@
-import { NextResponse } from "next/server";
-import { v4 as uuid } from "uuid";
-import { readConfigs, writeConfigs } from "@/lib/csv";
-import type { Config } from "@/lib/types";
+import {
+  authorize,
+  auditIfAdmin,
+  duplicate,
+  invalidBody,
+  invalidId,
+  notFound,
+  parseId,
+  readJson,
+  withErrors,
+} from "@/lib/api/route-helpers";
+import {
+  configInputSchema,
+  configPatchSchema,
+  createConfig,
+  deleteConfig,
+  listConfigs,
+  updateConfig,
+} from "@/lib/repo/configs";
+import { toConfig } from "@/lib/api/serializers";
 
-export async function GET() {
-  const configs = readConfigs();
-  return NextResponse.json(configs);
-}
+export const GET = withErrors(async (request) => {
+  const scope = await authorize(request);
+  if ("response" in scope) return scope.response;
+  const rows = await listConfigs(scope.userId);
+  return Response.json(rows.map(toConfig));
+});
 
-export async function POST(request: Request) {
-  const body = await request.json();
-  const configs = readConfigs();
-  const newConfig: Config = {
-    id: uuid(),
-    configName: body.configName,
-    creatorsCategory: body.creatorsCategory,
-    analysisInstruction: body.analysisInstruction,
-    newConceptsInstruction: body.newConceptsInstruction,
-  };
-  configs.push(newConfig);
-  writeConfigs(configs);
-  return NextResponse.json(newConfig, { status: 201 });
-}
+export const POST = withErrors(async (request) => {
+  const scope = await authorize(request);
+  if ("response" in scope) return scope.response;
+  const parsed = configInputSchema.safeParse(await readJson(request));
+  if (!parsed.success) return invalidBody();
+  const result = await createConfig(scope.userId, parsed.data);
+  if ("error" in result) return duplicate();
+  await auditIfAdmin(scope, "create", { resource: "config", id: result.id });
+  return Response.json(toConfig(result), { status: 201 });
+});
 
-export async function PUT(request: Request) {
-  const body = await request.json();
-  const configs = readConfigs();
-  const index = configs.findIndex((c) => c.id === body.id);
-  if (index === -1) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  configs[index] = { ...configs[index], ...body };
-  writeConfigs(configs);
-  return NextResponse.json(configs[index]);
-}
+export const PUT = withErrors(async (request) => {
+  const scope = await authorize(request);
+  if ("response" in scope) return scope.response;
+  const body = await readJson(request);
+  if (typeof body !== "object" || body === null) return invalidBody();
+  const id = parseId((body as { id?: unknown }).id);
+  if (!id) return invalidId();
+  const parsed = configPatchSchema.safeParse(body);
+  if (!parsed.success) return invalidBody();
+  const result = await updateConfig(scope.userId, id, parsed.data);
+  if (result === undefined) return notFound();
+  if ("error" in result) return duplicate();
+  await auditIfAdmin(scope, "update", { resource: "config", id });
+  return Response.json(toConfig(result));
+});
 
-export async function DELETE(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-  const configs = readConfigs();
-  const filtered = configs.filter((c) => c.id !== id);
-  writeConfigs(filtered);
-  return NextResponse.json({ success: true });
-}
+export const DELETE = withErrors(async (request) => {
+  const scope = await authorize(request);
+  if ("response" in scope) return scope.response;
+  const id = parseId(new URL(request.url).searchParams.get("id"));
+  if (!id) return invalidId();
+  if (!(await deleteConfig(scope.userId, id))) return notFound();
+  await auditIfAdmin(scope, "delete", { resource: "config", id });
+  return Response.json({ success: true });
+});

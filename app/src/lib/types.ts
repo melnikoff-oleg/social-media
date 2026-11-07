@@ -58,4 +58,6 @@ export interface PipelineProgress {
   videosTotal: number;
   errors: string[];
   log: string[];
+  /** Set when today's video quota cut the selection short (see PipelineEvent). */
+  limitedTo?: number;
 }

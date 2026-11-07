@@ -1,4 +1,8 @@
 /**
+ * OBSOLETE: the app now stores data in PostgreSQL. This script still writes the old CSV files
+ * under data/ and does not touch the database. Do not run it. To import existing CSV data,
+ * use `npm run migrate:csv` instead. Kept only for reference.
+ *
  * Seed script to create initial data files.
  * Run with: npx tsx src/scripts/seed.ts
  */
