@@ -101,14 +101,14 @@ export function AccountPanel({ account }: { account: AdminUser }) {
     const ok = await write(
       "/api/configs",
       { method: "PUT", body: JSON.stringify({ id, ...configForm }) },
-      "Não foi possível salvar a config"
+      "Não foi possível salvar a configuração"
     );
     if (ok) setEditingConfig(null);
   }
 
   async function deleteConfig(c: Config) {
-    if (!confirm(`Excluir a config "${c.configName}" da conta ${account.email}?`)) return;
-    await write(`/api/configs?id=${c.id}`, { method: "DELETE" }, "Não foi possível excluir a config");
+    if (!confirm(`Excluir a configuração "${c.configName}" da conta ${account.email}?`)) return;
+    await write(`/api/configs?id=${c.id}`, { method: "DELETE" }, "Não foi possível excluir a configuração");
   }
 
   async function saveCreator(id: string) {
@@ -148,14 +148,14 @@ export function AccountPanel({ account }: { account: AdminUser }) {
 
       <Tabs defaultValue="configs">
         <TabsList>
-          <TabsTrigger value="configs">Configs ({configs.length})</TabsTrigger>
+          <TabsTrigger value="configs">Configurações ({configs.length})</TabsTrigger>
           <TabsTrigger value="creators">Criadores ({creators.length})</TabsTrigger>
           <TabsTrigger value="videos">Vídeos ({videos.length})</TabsTrigger>
           <TabsTrigger value="runs">Execuções ({runs.length})</TabsTrigger>
         </TabsList>
 
         <TabsContent value="configs" className="space-y-3">
-          {configs.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma config.</p>}
+          {configs.length === 0 && <p className="text-sm text-muted-foreground">Nenhuma configuração.</p>}
           {configs.map((c) =>
             editingConfig === c.id && configForm ? (
               <div key={c.id} className="space-y-2 rounded-md border p-3">
@@ -170,7 +170,7 @@ export function AccountPanel({ account }: { account: AdminUser }) {
                     />
                   </div>
                   <div className="space-y-1">
-                    <Label htmlFor={`cfg-cat-${c.id}`}>Categoria de criadores</Label>
+                    <Label htmlFor={`cfg-cat-${c.id}`}>Categoria dos criadores</Label>
                     <Input
                       id={`cfg-cat-${c.id}`}
                       maxLength={200}
@@ -317,8 +317,8 @@ export function AccountPanel({ account }: { account: AdminUser }) {
               <TableHeader>
                 <TableRow>
                   <TableHead>Criador</TableHead>
-                  <TableHead>Config</TableHead>
-                  <TableHead>Views</TableHead>
+                  <TableHead>Configuração</TableHead>
+                  <TableHead>Visualizações</TableHead>
                   <TableHead>Adicionado</TableHead>
                   <TableHead className="text-right">Destaque</TableHead>
                 </TableRow>

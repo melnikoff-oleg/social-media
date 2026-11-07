@@ -4,6 +4,7 @@ import { invalidBody, jsonError, readJson, withErrors } from "@/lib/api/route-he
 import { getUsageToday, reserveRun } from "@/lib/quota/quota";
 import { executeRun, finishRun, startRun } from "@/lib/pipeline/runs";
 import type { PipelineEvent } from "@/lib/pipeline";
+import { CONCEPT_PROVIDERS, DEFAULT_CONCEPT_PROVIDER } from "@/lib/types";
 
 export const maxDuration = 300;
 
@@ -13,6 +14,7 @@ const paramsSchema = z.object({
   maxVideos: z.number().int().min(1).max(100),
   topK: z.number().int().min(1).max(10),
   nDays: z.number().int().min(1).max(365),
+  provider: z.enum(CONCEPT_PROVIDERS).default(DEFAULT_CONCEPT_PROVIDER),
 });
 
 /**
@@ -27,7 +29,13 @@ export const POST = withErrors(async (request) => {
   const user = session.user;
 
   const parsed = paramsSchema.safeParse(await readJson(request));
-  if (!parsed.success) return invalidBody();
+  if (!parsed.success) {
+    if (parsed.error.issues.some((i) => i.path[0] === "provider")) {
+      return jsonError("Modelo de conceitos inválido", 400);
+    }
+    return invalidBody();
+  }
+  // Always includes `provider`, so the run's stored params record which model was used.
   const params = parsed.data;
 
   if (user.role !== "admin") {

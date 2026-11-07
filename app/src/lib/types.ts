@@ -33,11 +33,18 @@ export interface Video {
   starred: boolean;
 }
 
+/** Which model generates the new concepts. */
+export const CONCEPT_PROVIDERS = ["claude", "deepseek"] as const;
+export type ConceptProvider = (typeof CONCEPT_PROVIDERS)[number];
+export const DEFAULT_CONCEPT_PROVIDER: ConceptProvider = "claude";
+
 export interface PipelineParams {
   configName: string;
   maxVideos: number;
   topK: number;
   nDays: number;
+  /** Concept-generation model; "claude" when missing. */
+  provider?: ConceptProvider;
 }
 
 export interface ActiveTask {

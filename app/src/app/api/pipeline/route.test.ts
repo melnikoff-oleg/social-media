@@ -24,6 +24,11 @@ vi.mock("@/lib/claude", () => ({
     throw new Error("unexpected Claude call");
   },
 }));
+vi.mock("@/lib/deepseek", () => ({
+  generateNewConcepts: async () => {
+    throw new Error("unexpected DeepSeek call");
+  },
+}));
 
 import { POST } from "./route";
 
@@ -73,6 +78,25 @@ describe("POST /api/pipeline", () => {
     expect((await POST(req(u, { ...BODY, topK: 0 }))).status).toBe(400);
     expect((await POST(req(u, { ...BODY, maxVideos: 1e12 }))).status).toBe(400);
     expect(await runsOf(u.id)).toHaveLength(0);
+  });
+
+  it("rejects an unknown concept provider with 400 and a Portuguese message", async () => {
+    const u = await mkUser("a@x.com");
+    const res = await POST(req(u, { ...BODY, provider: "foo" }));
+    expect(res.status).toBe(400);
+    expect(await res.json()).toEqual({ error: "Modelo de conceitos inválido" });
+    expect(await runsOf(u.id)).toHaveLength(0);
+  });
+
+  it("stores the provider in the run params (claude when missing)", async () => {
+    const a = await mkUser("a@x.com");
+    await (await POST(req(a))).text();
+    const b = await mkUser("b@x.com");
+    await (await POST(req(b, { ...BODY, provider: "deepseek" }))).text();
+    await vi.waitFor(async () => {
+      expect((await runsOf(a.id))[0].params).toMatchObject({ provider: "claude" });
+      expect((await runsOf(b.id))[0].params).toMatchObject({ provider: "deepseek" });
+    });
   });
 
   it("returns 409 busy while the user has a run in progress", async () => {

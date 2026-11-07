@@ -48,7 +48,7 @@ function reels(n: number, username = "creator1"): ApifyReel[] {
 }
 
 function fakeDeps(scraped: ApifyReel[], onAnalyze?: () => Promise<void>) {
-  const calls = { scrape: 0, analyze: 0, concepts: 0 };
+  const calls = { scrape: 0, analyze: 0, concepts: 0, claude: 0, deepseek: 0 };
   const deps: PipelineDeps = {
     scrapeReels: async () => {
       calls.scrape++;
@@ -59,9 +59,17 @@ function fakeDeps(scraped: ApifyReel[], onAnalyze?: () => Promise<void>) {
       if (onAnalyze) await onAnalyze();
       return "analysis";
     },
-    generateNewConcepts: async () => {
-      calls.concepts++;
-      return "concepts";
+    conceptGenerators: {
+      claude: async () => {
+        calls.concepts++;
+        calls.claude++;
+        return "concepts";
+      },
+      deepseek: async () => {
+        calls.concepts++;
+        calls.deepseek++;
+        return "deepseek concepts";
+      },
     },
   };
   return { deps, calls };
@@ -361,5 +369,41 @@ describe("executeRun", () => {
     const last = events.at(-1)!;
     expect(last.videosRemaining).toBeNull();
     expect(JSON.stringify(events)).not.toContain("Infinity");
+  });
+});
+
+describe("concept provider", () => {
+  async function runWith(params: PipelineParams) {
+    const user = await mkUser("p@x.com");
+    await seedOwnerData(user.id);
+    const { deps, calls } = fakeDeps(reels(2));
+    const events: PipelineEvent[] = [];
+    const started = await startRun(user.id, params);
+    if (!("runId" in started)) throw new Error("expected runId");
+    await executeRun(started.runId, params, (e) => events.push(e), { userId: user.id, user }, deps);
+    const saved = await db.select().from(videos).where(eq(videos.userId, user.id));
+    return { calls, events, saved, run: await runStatus(started.runId) };
+  }
+
+  it("uses the DeepSeek generator when provider is deepseek", async () => {
+    const { calls, events, saved, run } = await runWith({ ...PARAMS, provider: "deepseek" });
+    expect(calls.deepseek).toBe(2);
+    expect(calls.claude).toBe(0);
+    expect(saved.map((v) => v.newConcepts)).toEqual(["deepseek concepts", "deepseek concepts"]);
+    expect(events.at(-1)!.log.some((l) => l.includes("DeepSeek gerando conceitos"))).toBe(true);
+    expect(run.params).toMatchObject({ provider: "deepseek" });
+  });
+
+  it("uses the Claude generator when provider is claude", async () => {
+    const { calls } = await runWith({ ...PARAMS, provider: "claude" });
+    expect(calls.claude).toBe(2);
+    expect(calls.deepseek).toBe(0);
+  });
+
+  it("defaults to Claude when provider is missing", async () => {
+    const { calls, events } = await runWith(PARAMS);
+    expect(calls.claude).toBe(2);
+    expect(calls.deepseek).toBe(0);
+    expect(events.at(-1)!.log.some((l) => l.includes("Claude gerando conceitos"))).toBe(true);
   });
 });

@@ -19,7 +19,12 @@ import { usePipeline, limitedToMessage } from "@/context/pipeline-context";
 import { QuotaBadge } from "@/components/quota-badge";
 import { fetchList } from "@/lib/client/api";
 import { useMe } from "@/lib/client/use-me";
-import type { Config } from "@/lib/types";
+import { DEFAULT_CONCEPT_PROVIDER, type Config, type ConceptProvider } from "@/lib/types";
+
+const PROVIDER_OPTIONS: { value: ConceptProvider; label: string }[] = [
+  { value: "claude", label: "Claude (Anthropic)" },
+  { value: "deepseek", label: "DeepSeek" },
+];
 
 function formatViews(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -33,6 +38,7 @@ export default function RunPage() {
   const [maxVideos, setMaxVideos] = useState(20);
   const [topK, setTopK] = useState(3);
   const [nDays, setNDays] = useState(30);
+  const [provider, setProvider] = useState<ConceptProvider>(DEFAULT_CONCEPT_PROVIDER);
   const [showAdvanced, setShowAdvanced] = useState(false);
   const logEndRef = useRef<HTMLDivElement>(null);
 
@@ -54,7 +60,7 @@ export default function RunPage() {
 
   const handleRun = () => {
     if (!selectedConfig) return;
-    runPipeline({ configName: selectedConfig, maxVideos, topK, nDays });
+    runPipeline({ configName: selectedConfig, maxVideos, topK, nDays, provider });
   };
 
   const totalProgress = progress
@@ -66,9 +72,9 @@ export default function RunPage() {
   return (
     <div className="space-y-8">
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Run Pipeline</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Executar pipeline</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Analyze competitor content and generate new video concepts
+          Analise o conteúdo dos concorrentes e gere novos conceitos de vídeo
         </p>
         <div className="mt-3">
           <QuotaBadge me={me} />
@@ -79,15 +85,15 @@ export default function RunPage() {
       <div className="glass rounded-2xl p-6 space-y-6">
         <div className="flex items-center gap-2">
           <Zap className="h-4 w-4 text-purple-400" />
-          <h2 className="text-sm font-semibold">Pipeline Configuration</h2>
+          <h2 className="text-sm font-semibold">Configuração do pipeline</h2>
         </div>
 
         <div className="space-y-4">
           <div>
-            <Label className="text-xs text-muted-foreground">Config</Label>
+            <Label className="text-xs text-muted-foreground">Configuração</Label>
             <Select value={selectedConfig} onValueChange={setSelectedConfig}>
               <SelectTrigger className="mt-1.5 rounded-xl glass border-white/[0.08] h-11">
-                <SelectValue placeholder="Select a config..." />
+                <SelectValue placeholder="Selecione uma configuração..." />
               </SelectTrigger>
               <SelectContent>
                 {configs.map((c) => (
@@ -100,18 +106,32 @@ export default function RunPage() {
             )}
           </div>
 
+          <div>
+            <Label className="text-xs text-muted-foreground">Modelo de conceitos</Label>
+            <Select value={provider} onValueChange={(v) => setProvider(v as ConceptProvider)}>
+              <SelectTrigger className="mt-1.5 rounded-xl glass border-white/[0.08] h-11">
+                <SelectValue placeholder="Selecione um modelo..." />
+              </SelectTrigger>
+              <SelectContent>
+                {PROVIDER_OPTIONS.map((p) => (
+                  <SelectItem key={p.value} value={p.value}>{p.label}</SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+
           <button
             onClick={() => setShowAdvanced(!showAdvanced)}
             className="flex items-center gap-1.5 text-xs text-muted-foreground hover:text-foreground transition-colors"
           >
             <ChevronDown className={`h-3 w-3 transition-transform duration-200 ${showAdvanced ? "rotate-180" : ""}`} />
-            Advanced settings
+            Configurações avançadas
           </button>
 
           {showAdvanced && (
             <div className="grid gap-4 md:grid-cols-3 animate-in fade-in slide-in-from-top-2 duration-200">
               <div>
-                <Label className="text-xs text-muted-foreground">Max Videos per Creator</Label>
+                <Label className="text-xs text-muted-foreground">Máx. de vídeos por criador</Label>
                 <Input
                   type="number"
                   value={maxVideos}
@@ -122,7 +142,7 @@ export default function RunPage() {
                 />
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Top K to Analyze</Label>
+                <Label className="text-xs text-muted-foreground">Top K para analisar</Label>
                 <Input
                   type="number"
                   value={topK}
@@ -133,7 +153,7 @@ export default function RunPage() {
                 />
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Days Lookback</Label>
+                <Label className="text-xs text-muted-foreground">Dias de histórico</Label>
                 <Input
                   type="number"
                   value={nDays}
@@ -155,12 +175,12 @@ export default function RunPage() {
             {running ? (
               <>
                 <Loader2 className="h-4 w-4 animate-spin" />
-                Running Pipeline...
+                Executando pipeline...
               </>
             ) : (
               <>
                 <Play className="h-4 w-4" />
-                Run Pipeline
+                Executar pipeline
               </>
             )}
           </Button>
@@ -178,18 +198,18 @@ export default function RunPage() {
                 {progress.status === "completed" && <CheckCircle2 className="h-4 w-4 text-emerald-400" />}
                 {progress.status === "error" && <XCircle className="h-4 w-4 text-red-400" />}
                 <h2 className="text-sm font-semibold">
-                  {progress.status === "running" && progress.phase === "scraping" && "Scraping creators..."}
-                  {progress.status === "running" && progress.phase === "analyzing" && "Analyzing videos..."}
-                  {progress.status === "completed" && "Pipeline complete"}
-                  {progress.status === "error" && "Pipeline failed"}
+                  {progress.status === "running" && progress.phase === "scraping" && "Buscando criadores..."}
+                  {progress.status === "running" && progress.phase === "analyzing" && "Analisando vídeos..."}
+                  {progress.status === "completed" && "Pipeline concluído"}
+                  {progress.status === "error" && "Falha no pipeline"}
                 </h2>
               </div>
               <div className="flex items-center gap-3 text-xs text-muted-foreground">
                 {progress.phase === "scraping" && (
-                  <span>Creators: <span className="text-foreground">{progress.creatorsScraped}/{progress.creatorsTotal}</span></span>
+                  <span>Criadores: <span className="text-foreground">{progress.creatorsScraped}/{progress.creatorsTotal}</span></span>
                 )}
                 {(progress.phase === "analyzing" || progress.phase === "done") && (
-                  <span>Videos: <span className="text-foreground">{progress.videosAnalyzed}/{progress.videosTotal}</span></span>
+                  <span>Vídeos: <span className="text-foreground">{progress.videosAnalyzed}/{progress.videosTotal}</span></span>
                 )}
                 {progress.errors.length > 0 && (
                   <span className="inline-flex items-center gap-1 text-red-400">
@@ -229,7 +249,7 @@ export default function RunPage() {
                     <span className="text-[11px] text-muted-foreground">{task.step}</span>
                     {task.views && (
                       <span className="ml-auto text-[11px] text-muted-foreground/60">
-                        {formatViews(task.views)} views
+                        {formatViews(task.views)} visualizações
                       </span>
                     )}
                   </div>
@@ -249,7 +269,7 @@ export default function RunPage() {
               <Button asChild className="w-full rounded-xl h-11 bg-gradient-to-r from-emerald-500 to-teal-600 hover:from-emerald-600 hover:to-teal-700 border-0 font-semibold gap-2">
                 <Link href="/videos">
                   <Film className="h-4 w-4" />
-                  View {progress.videosAnalyzed} New Videos
+                  Ver {progress.videosAnalyzed} novos vídeos
                   <ArrowRight className="h-4 w-4" />
                 </Link>
               </Button>
@@ -258,7 +278,7 @@ export default function RunPage() {
             {/* Errors summary */}
             {progress.errors.length > 0 && (
               <div className="rounded-xl bg-red-500/5 border border-red-500/10 p-3 space-y-1">
-                <p className="text-[11px] font-medium text-red-400">Errors ({progress.errors.length})</p>
+                <p className="text-[11px] font-medium text-red-400">Erros ({progress.errors.length})</p>
                 {progress.errors.map((err, i) => (
                   <p key={i} className="text-[11px] text-red-400/70 leading-relaxed">{err}</p>
                 ))}
@@ -270,9 +290,9 @@ export default function RunPage() {
           <details className="glass rounded-2xl overflow-hidden">
             <summary className="p-4 flex items-center gap-2 cursor-pointer text-sm text-muted-foreground hover:text-foreground transition-colors">
               <Terminal className="h-4 w-4" />
-              <span className="font-medium">Log</span>
+              <span className="font-medium">Registro</span>
               <Badge variant="secondary" className="ml-auto rounded-md text-[10px] bg-white/[0.05] border border-white/[0.06]">
-                {progress.log.length} entries
+                {progress.log.length} entradas
               </Badge>
             </summary>
             <div className="border-t border-white/[0.06]">
@@ -282,9 +302,9 @@ export default function RunPage() {
                     <div
                       key={i}
                       className={`leading-5 ${
-                        line.includes("Error") || line.includes("error")
+                        /erro|error/i.test(line)
                           ? "text-red-400"
-                          : line.includes("done") || line.includes("complete") || line.includes("Complete")
+                          : /conclu[ií]d|done|complete/i.test(line)
                           ? "text-emerald-400/80"
                           : "text-muted-foreground"
                       }`}

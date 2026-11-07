@@ -91,7 +91,7 @@ export default function ConfigsPage() {
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this config?")) return;
+    if (!confirm("Excluir esta configuração?")) return;
     try {
       const res = await apiFetch(`/api/configs?id=${id}`, { method: "DELETE" });
       if (res.status === 401) return;
@@ -110,50 +110,50 @@ export default function ConfigsPage() {
     <div className="space-y-8">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Configs</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Configurações</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage pipeline configurations and AI prompts
+            Gerencie as configurações do pipeline e os prompts de IA
           </p>
         </div>
         <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
           <DialogTrigger asChild>
             <Button onClick={openNew} className="rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 border-0 gap-1.5">
               <Plus className="h-4 w-4" />
-              New Config
+              Nova configuração
             </Button>
           </DialogTrigger>
           <DialogContent className="max-w-2xl max-h-[90vh] overflow-y-auto glass-strong rounded-2xl border-white/[0.08]">
             <DialogHeader>
-              <DialogTitle>{editing ? "Edit Config" : "New Config"}</DialogTitle>
+              <DialogTitle>{editing ? "Editar configuração" : "Nova configuração"}</DialogTitle>
             </DialogHeader>
             <div className="space-y-5 pt-2">
               <div>
-                <Label className="text-xs text-muted-foreground">Config Name</Label>
+                <Label className="text-xs text-muted-foreground">Nome da configuração</Label>
                 <Input
                   value={form.configName}
                   onChange={(e) => setForm({ ...form, configName: e.target.value })}
-                  placeholder="e.g. Real Estate Videos for Anja"
+                  placeholder="ex.: Vídeos de imóveis para a Anja"
                   className="mt-1.5 rounded-xl glass border-white/[0.08] h-11"
                 />
               </div>
               <div>
-                <Label className="text-xs text-muted-foreground">Creators Category</Label>
+                <Label className="text-xs text-muted-foreground">Categoria dos criadores</Label>
                 <Input
                   value={form.creatorsCategory}
                   onChange={(e) => setForm({ ...form, creatorsCategory: e.target.value })}
-                  placeholder="e.g. dubai-real-estate"
+                  placeholder="ex.: imoveis-dubai"
                   className="mt-1.5 rounded-xl glass border-white/[0.08] h-11"
                 />
               </div>
               <div>
                 <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <Search className="h-3 w-3 text-purple-400" />
-                  Analysis Instruction (Gemini prompt)
+                  Instrução de análise (prompt do Gemini)
                 </Label>
                 <Textarea
                   value={form.analysisInstruction}
                   onChange={(e) => setForm({ ...form, analysisInstruction: e.target.value })}
-                  placeholder="Prompt that tells Gemini how to analyze the video..."
+                  placeholder="Prompt que diz ao Gemini como analisar o vídeo..."
                   rows={10}
                   className="mt-1.5 rounded-xl glass border-white/[0.08] font-mono text-xs leading-relaxed"
                 />
@@ -161,12 +161,12 @@ export default function ConfigsPage() {
               <div>
                 <Label className="text-xs text-muted-foreground flex items-center gap-1.5">
                   <Sparkles className="h-3 w-3 text-indigo-400" />
-                  New Concepts Instruction (Claude prompt)
+                  Instrução de novos conceitos (prompt do Claude)
                 </Label>
                 <Textarea
                   value={form.newConceptsInstruction}
                   onChange={(e) => setForm({ ...form, newConceptsInstruction: e.target.value })}
-                  placeholder="Prompt that tells Claude how to generate new concepts..."
+                  placeholder="Prompt que diz ao Claude como gerar novos conceitos..."
                   rows={10}
                   className="mt-1.5 rounded-xl glass border-white/[0.08] font-mono text-xs leading-relaxed"
                 />
@@ -178,7 +178,7 @@ export default function ConfigsPage() {
                 onClick={handleSave}
                 className="w-full rounded-xl h-11 bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 border-0"
               >
-                {editing ? "Save Changes" : "Create Config"}
+                {editing ? "Salvar alterações" : "Criar configuração"}
               </Button>
             </div>
           </DialogContent>
@@ -240,13 +240,13 @@ export default function ConfigsPage() {
               </div>
               <div className="mt-4 grid gap-3 md:grid-cols-2">
                 <div className="rounded-xl bg-black/20 border border-white/[0.04] p-3">
-                  <p className="text-[10px] font-medium text-purple-400 uppercase tracking-wider mb-1.5">Analysis Prompt</p>
+                  <p className="text-[10px] font-medium text-purple-400 uppercase tracking-wider mb-1.5">Prompt de análise</p>
                   <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
                     {config.analysisInstruction}
                   </p>
                 </div>
                 <div className="rounded-xl bg-black/20 border border-white/[0.04] p-3">
-                  <p className="text-[10px] font-medium text-indigo-400 uppercase tracking-wider mb-1.5">Concepts Prompt</p>
+                  <p className="text-[10px] font-medium text-indigo-400 uppercase tracking-wider mb-1.5">Prompt de conceitos</p>
                   <p className="text-xs text-muted-foreground line-clamp-3 leading-relaxed">
                     {config.newConceptsInstruction}
                   </p>
@@ -259,8 +259,8 @@ export default function ConfigsPage() {
         {configs.length === 0 && (
           <div className="glass rounded-2xl p-12 text-center">
             <Settings2 className="mx-auto h-10 w-10 text-muted-foreground/30" />
-            <h3 className="mt-4 font-semibold">No configs yet</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Create one to get started.</p>
+            <h3 className="mt-4 font-semibold">Nenhuma configuração ainda</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Crie uma para começar.</p>
           </div>
         )}
       </div>

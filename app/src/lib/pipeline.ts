@@ -7,8 +7,15 @@ import { getCreator, listCreators } from "@/lib/repo/creators";
 import { reserveVideos } from "@/lib/quota/quota";
 import { scrapeReels, type ApifyReel } from "./apify";
 import { uploadVideo, analyzeVideo } from "./gemini";
-import { generateNewConcepts } from "./claude";
-import type { PipelineParams, PipelineProgress, ActiveTask } from "./types";
+import { generateNewConcepts as claudeGenerateNewConcepts } from "./claude";
+import { generateNewConcepts as deepseekGenerateNewConcepts } from "./deepseek";
+import {
+  DEFAULT_CONCEPT_PROVIDER,
+  type ConceptProvider,
+  type PipelineParams,
+  type PipelineProgress,
+  type ActiveTask,
+} from "./types";
 
 const VIDEO_CONCURRENCY = 3;
 /** Timeout for downloading one reel from the CDN before it is sent to Gemini. */
@@ -26,8 +33,20 @@ export interface PipelineDeps {
     analysisInstruction: string,
     onStep: (step: string) => void
   ): Promise<string>;
-  generateNewConcepts(analysis: string, newConceptsInstruction: string): Promise<string>;
+  /** One concept generator per provider; the run picks one from `params.provider`. */
+  conceptGenerators: Record<ConceptProvider, ConceptGenerator>;
 }
+
+export type ConceptGenerator = (
+  analysis: string,
+  newConceptsInstruction: string
+) => Promise<string>;
+
+/** Display name used in progress messages. */
+const PROVIDER_LABEL: Record<ConceptProvider, string> = {
+  claude: "Claude",
+  deepseek: "DeepSeek",
+};
 
 export const defaultPipelineDeps: PipelineDeps = {
   scrapeReels,
@@ -36,17 +55,20 @@ export const defaultPipelineDeps: PipelineDeps = {
     const videoResponse = await fetch(videoUrl, {
       signal: AbortSignal.timeout(VIDEO_DOWNLOAD_TIMEOUT_MS),
     });
-    if (!videoResponse.ok) throw new Error(`Download failed: ${videoResponse.status}`);
+    if (!videoResponse.ok) throw new Error(`Falha no download: ${videoResponse.status}`);
     const videoBuffer = Buffer.from(await videoResponse.arrayBuffer());
     const contentType = videoResponse.headers.get("content-type") || "video/mp4";
 
-    onStep("Uploading to Gemini");
+    onStep("Enviando para o Gemini");
     const fileData = await uploadVideo(videoBuffer, contentType);
 
-    onStep("Gemini analyzing");
+    onStep("Gemini analisando");
     return analyzeVideo(fileData.uri, fileData.mimeType, analysisInstruction);
   },
-  generateNewConcepts,
+  conceptGenerators: {
+    claude: claudeGenerateNewConcepts,
+    deepseek: deepseekGenerateNewConcepts,
+  },
 };
 
 /** Whose data the run reads and writes, and whose quota it consumes. */
@@ -173,6 +195,9 @@ export async function runPipeline(
   deps: PipelineDeps = defaultPipelineDeps
 ): Promise<PipelineResult> {
   const serverLog: string[] = [];
+  const provider: ConceptProvider = params.provider ?? DEFAULT_CONCEPT_PROVIDER;
+  const generateConcepts = deps.conceptGenerators[provider];
+  const providerLabel = PROVIDER_LABEL[provider];
   const progress: PipelineEvent = {
     status: "running",
     phase: "scraping",
@@ -240,7 +265,7 @@ export async function runPipeline(
     );
     if (!config) throw new PipelineUserError("Configuração não encontrada");
 
-    log(`Loaded config: ${config.configName}`);
+    log(`Configuração carregada: ${config.configName}`);
 
     // Load the owner's creators in the config's category
     const creators = (await listCreators(owner.userId)).filter(
@@ -251,7 +276,7 @@ export async function runPipeline(
     }
 
     progress.creatorsTotal = creators.length;
-    log(`Found ${creators.length} creators — scraping all in parallel`);
+    log(`${creators.length} criadores encontrados — buscando todos em paralelo`);
     emit();
 
     // Phase 1: Scrape all creators in parallel
@@ -262,11 +287,11 @@ export async function runPipeline(
     const scrapeResults = await Promise.allSettled(
       creators.map(async (creator) => {
         const taskId = `scrape-${creator.username}`;
-        addTask({ id: taskId, creator: creator.username, step: "Scraping reels" });
+        addTask({ id: taskId, creator: creator.username, step: "Buscando reels" });
 
         try {
           const reels = await deps.scrapeReels(creator.username, params.maxVideos, params.nDays);
-          updateTask(taskId, `Found ${reels.length} reels`);
+          updateTask(taskId, `${reels.length} reels encontrados`);
 
           const scraped: ScrapedVideo[] = reels
             .filter((r) => r.videoUrl && r.timestamp)
@@ -286,8 +311,8 @@ export async function runPipeline(
           scraped.sort((a, b) => b.views - a.views);
           const topVideos = scraped.slice(0, params.topK);
 
-          updateTask(taskId, `Top ${topVideos.length} selected`);
-          log(`@${creator.username}: ${reels.length} reels → top ${topVideos.length} selected`);
+          updateTask(taskId, `Top ${topVideos.length} selecionados`);
+          log(`@${creator.username}: ${reels.length} reels → top ${topVideos.length} selecionados`);
           progress.creatorsScraped++;
           return topVideos;
         } finally {
@@ -316,14 +341,14 @@ export async function runPipeline(
         progress.limitedTo = granted;
         log(
           granted === 0
-            ? "Daily video quota exhausted — nothing to analyze"
-            : `Daily video quota: analyzing only the top ${granted} videos`
+            ? "Limite diário de vídeos esgotado — nada para analisar"
+            : `Limite diário de vídeos: analisando apenas os ${granted} mais vistos`
         );
       }
     }
 
     progress.videosTotal = allTopVideos.length;
-    log(`Scraping done. ${allTopVideos.length} videos to analyze (${VIDEO_CONCURRENCY} workers)`);
+    log(`Busca concluída. ${allTopVideos.length} vídeos para analisar (${VIDEO_CONCURRENCY} workers)`);
     emit();
 
     // Phase 2: Process videos concurrently
@@ -332,25 +357,25 @@ export async function runPipeline(
 
     await runWithConcurrency(allTopVideos, VIDEO_CONCURRENCY, async (video) => {
       const taskId = `video-${uuid().slice(0, 8)}`;
-      const label = `${video.views.toLocaleString()} views`;
+      const label = `${video.views.toLocaleString("pt-BR")} visualizações`;
 
       let failure = "Falha ao analisar vídeo";
       try {
-        addTask({ id: taskId, creator: video.username, step: "Downloading", views: video.views });
+        addTask({ id: taskId, creator: video.username, step: "Baixando", views: video.views });
 
         const analysis = await deps.analyzeVideo(
           video.videoUrl,
           config.analysisInstruction ?? "",
           (step) => {
             updateTask(taskId, step);
-            if (step !== "Downloading") log(`@${video.username} (${label}): ${step}`);
+            if (step !== "Baixando") log(`@${video.username} (${label}): ${step}`);
           }
         );
 
-        updateTask(taskId, "Claude generating concepts");
-        log(`@${video.username} (${label}): Claude generating concepts`);
+        updateTask(taskId, `${providerLabel} gerando conceitos`);
+        log(`@${video.username} (${label}): ${providerLabel} gerando conceitos`);
 
-        const newConcepts = await deps.generateNewConcepts(
+        const newConcepts = await generateConcepts(
           analysis,
           config.newConceptsInstruction ?? ""
         );
@@ -360,7 +385,7 @@ export async function runPipeline(
 
         progress.videosAnalyzed++;
         removeTask(taskId);
-        log(`@${video.username} (${label}): done`);
+        log(`@${video.username} (${label}): concluído`);
       } catch (err) {
         removeTask(taskId);
         fail(`${failure} de @${video.username} (${label})`, err);
@@ -369,7 +394,7 @@ export async function runPipeline(
 
     progress.phase = "done";
     progress.status = "completed";
-    log(`Pipeline complete! ${progress.videosAnalyzed}/${progress.videosTotal} videos analyzed, ${progress.errors.length} errors.`);
+    log(`Pipeline concluído! ${progress.videosAnalyzed}/${progress.videosTotal} vídeos analisados, ${progress.errors.length} erros.`);
   } catch (err) {
     progress.status = "error";
     progress.phase = "done";

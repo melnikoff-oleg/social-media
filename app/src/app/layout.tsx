@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Virality System",
-  description: "AI-powered Instagram Reels viral content analyzer",
+  title: "Sistema de Viralidade",
+  description: "Analisador de conteúdo viral de Reels do Instagram com IA",
 };
 
 export default function RootLayout({
@@ -26,7 +26,7 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en">
+    <html lang="pt-BR">
       <body className={`${geistSans.variable} ${geistMono.variable} antialiased`}>
         <TooltipProvider>
           <PipelineProvider>

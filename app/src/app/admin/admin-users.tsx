@@ -66,7 +66,7 @@ export function AdminUsers({ currentUserId }: { currentUserId: string }) {
           <div>
             <h2 className="text-lg font-semibold">Gerenciar conta</h2>
             <p className="text-sm text-muted-foreground">
-              Escolha uma conta para ver e alterar configs, criadores, vídeos e execuções.
+              Escolha uma conta para ver e alterar configurações, criadores, vídeos e execuções.
             </p>
           </div>
           <select

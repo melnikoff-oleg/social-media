@@ -104,9 +104,9 @@ function VideosContent() {
     <div className="space-y-8">
       {/* Header */}
       <div>
-        <h1 className="text-3xl font-bold tracking-tight">Videos</h1>
+        <h1 className="text-3xl font-bold tracking-tight">Vídeos</h1>
         <p className="mt-1 text-sm text-muted-foreground">
-          Browse analyzed competitor reels with AI insights
+          Explore os reels analisados dos concorrentes com insights de IA
         </p>
       </div>
 
@@ -118,10 +118,10 @@ function VideosContent() {
       <div className="flex flex-wrap items-center gap-3">
         <Select value={filterConfig} onValueChange={setFilterConfig}>
           <SelectTrigger className="w-[220px] rounded-xl glass border-white/[0.08] h-10">
-            <SelectValue placeholder="Filter by config" />
+            <SelectValue placeholder="Filtrar por configuração" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Configs</SelectItem>
+            <SelectItem value="all">Todas as configurações</SelectItem>
             {configs.map((c) => (
               <SelectItem key={c.id} value={c.configName}>{c.configName}</SelectItem>
             ))}
@@ -130,10 +130,10 @@ function VideosContent() {
 
         <Select value={filterCreator} onValueChange={setFilterCreator}>
           <SelectTrigger className="w-[200px] rounded-xl glass border-white/[0.08] h-10">
-            <SelectValue placeholder="Filter by creator" />
+            <SelectValue placeholder="Filtrar por criador" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Creators</SelectItem>
+            <SelectItem value="all">Todos os criadores</SelectItem>
             {uniqueCreators.map((c) => (
               <SelectItem key={c} value={c}>@{c}</SelectItem>
             ))}
@@ -146,15 +146,15 @@ function VideosContent() {
             <SelectValue />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="views">Most Views</SelectItem>
-            <SelectItem value="date-posted">Date Posted</SelectItem>
-            <SelectItem value="date-added">Date Added</SelectItem>
-            <SelectItem value="starred">Starred First</SelectItem>
+            <SelectItem value="views">Mais visualizações</SelectItem>
+            <SelectItem value="date-posted">Data de publicação</SelectItem>
+            <SelectItem value="date-added">Data de adição</SelectItem>
+            <SelectItem value="starred">Favoritos primeiro</SelectItem>
           </SelectContent>
         </Select>
 
         <Badge variant="secondary" className="rounded-lg px-3 py-1.5 text-xs bg-white/[0.05] border border-white/[0.08]">
-          {filtered.length} videos
+          {filtered.length} vídeos
         </Badge>
       </div>
 
@@ -235,7 +235,7 @@ function VideosContent() {
                       className="flex-1 rounded-xl text-[11px] h-7 gap-1 transition-all duration-200 glass border-white/[0.06] text-muted-foreground hover:text-foreground"
                     >
                       <Search className="h-3 w-3" />
-                      Analysis
+                      Análise
                     </Button>
                     <Button
                       variant="ghost"
@@ -244,7 +244,7 @@ function VideosContent() {
                       className="flex-1 rounded-xl text-[11px] h-7 gap-1 transition-all duration-200 glass border-white/[0.06] text-muted-foreground hover:text-foreground"
                     >
                       <Sparkles className="h-3 w-3" />
-                      Concepts
+                      Conceitos
                     </Button>
                   </div>
                 </div>
@@ -257,9 +257,9 @@ function VideosContent() {
       {filtered.length === 0 && (
         <div className="glass rounded-2xl p-12 text-center">
           <Film className="mx-auto h-10 w-10 text-muted-foreground/30" />
-          <h3 className="mt-4 font-semibold">No videos found</h3>
+          <h3 className="mt-4 font-semibold">Nenhum vídeo encontrado</h3>
           <p className="mt-1 text-sm text-muted-foreground">
-            Run a pipeline analysis to generate results, or adjust your filters.
+            Execute o pipeline para gerar resultados ou ajuste os filtros.
           </p>
         </div>
       )}
@@ -268,7 +268,7 @@ function VideosContent() {
       <Dialog open={!!modalVideo} onOpenChange={(open) => { if (!open) setModalVideo(null); }}>
         <DialogContent className="max-w-3xl max-h-[90vh] overflow-hidden glass-strong rounded-2xl border-white/[0.08] p-0 gap-0">
           <DialogTitle className="sr-only">
-            {modalSection === "analysis" ? "Video Analysis" : "New Concepts"}
+            {modalSection === "analysis" ? "Análise do vídeo" : "Novos conceitos"}
           </DialogTitle>
           {modalVideo && (
             <>
@@ -329,7 +329,7 @@ function VideosContent() {
                     }`}
                   >
                     <Search className="h-3 w-3" />
-                    Analysis
+                    Análise
                   </Button>
                   <Button
                     variant="ghost"
@@ -342,7 +342,7 @@ function VideosContent() {
                     }`}
                   >
                     <Sparkles className="h-3 w-3" />
-                    Concepts
+                    Conceitos
                   </Button>
                 </div>
               </div>

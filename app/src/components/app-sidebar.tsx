@@ -21,10 +21,10 @@ import {
 } from "@/components/ui/sidebar";
 
 const navItems = [
-  { title: "Videos", href: "/videos", icon: Film },
-  { title: "Run Pipeline", href: "/run", icon: Play },
-  { title: "Creators", href: "/creators", icon: Users },
-  { title: "Configs", href: "/configs", icon: Settings2 },
+  { title: "Vídeos", href: "/videos", icon: Film },
+  { title: "Executar pipeline", href: "/run", icon: Play },
+  { title: "Criadores", href: "/creators", icon: Users },
+  { title: "Configurações", href: "/configs", icon: Settings2 },
 ];
 const adminItem = { title: "Admin", href: "/admin", icon: ShieldCheck };
 
@@ -61,8 +61,8 @@ export function AppSidebar() {
             <Film className="h-4 w-4 text-white" />
           </div>
           <div>
-            <h1 className="text-sm font-semibold tracking-tight">Virality System</h1>
-            <p className="text-[11px] text-muted-foreground">Instagram Reels AI</p>
+            <h1 className="text-sm font-semibold tracking-tight">Sistema de Viralidade</h1>
+            <p className="text-[11px] text-muted-foreground">IA para Reels do Instagram</p>
           </div>
         </div>
       </SidebarHeader>
@@ -100,7 +100,7 @@ export function AppSidebar() {
         <QuotaBadge me={me} />
         {lastRun && (
           <p className="text-[11px] text-muted-foreground">
-            Last pipeline: <span className="text-foreground/70">{lastRun}</span>
+            Último pipeline: <span className="text-foreground/70">{lastRun}</span>
           </p>
         )}
         <Button

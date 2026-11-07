@@ -26,6 +26,7 @@ npm run dev
 - `APIFY_API_TOKEN` — Apify Instagram scraper
 - `GEMINI_API_KEY` — Google Gemini video analysis
 - `ANTHROPIC_API_KEY` — Claude concept generation
+- `DEEPSEEK_API_KEY` / `DEEPSEEK_MODEL` — optional, DeepSeek concept generation (model defaults to `deepseek-chat`)
 - `DATABASE_URL` — app database (local: `postgres://app:app@localhost:5435/social_media`)
 - `TEST_DATABASE_URL` — separate database used only by `npx vitest run`
 
@@ -39,7 +40,7 @@ npm run dev
 - Old CSV files in `data/` are legacy (import once with `npm run migrate:csv`)
 - **Apify** — Instagram scraping
 - **Google Gemini (default gemini-2.5-flash)** — Video analysis (upload + multimodal)
-- **Claude Sonnet** — New concept generation
+- **Claude Sonnet** or **DeepSeek** — New concept generation (chosen per run on the Run page)
 
 ---
 
@@ -86,6 +87,7 @@ Every request is scoped to the logged-in account; runs consume the account's dai
 │   │   │   ├── apify.ts                  # Apify scraper client
 │   │   │   ├── gemini.ts                 # Gemini video analysis client
 │   │   │   ├── claude.ts                 # Claude concept generation client
+│   │   │   ├── deepseek.ts               # DeepSeek concept generation client (same signature)
 │   │   │   ├── csv.ts                    # Legacy CSV utilities
 │   │   │   ├── db/                       # Drizzle schema, connection, migrate runner
 │   │   │   ├── auth/                     # Sessions, password hashing, rate limit, require-session
