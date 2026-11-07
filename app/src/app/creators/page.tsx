@@ -22,6 +22,7 @@ import {
 import { Plus, Pencil, Trash2, Users, Eye, Film, UserCheck, RefreshCw, Loader2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import type { Creator } from "@/lib/types";
+import { apiFetch, fetchList, readError } from "@/lib/client/api";
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -39,8 +40,14 @@ export default function CreatorsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
-  const loadCreators = () => {
-    fetch("/api/creators").then((r) => r.json()).then(setCreators);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const loadCreators = async () => {
+    const r = await fetchList<Creator>("/api/creators");
+    setCreators(r.items);
+    setPageError(r.error);
   };
 
   useEffect(() => { loadCreators(); }, []);
@@ -54,33 +61,36 @@ export default function CreatorsPage() {
   const openNew = () => {
     setEditing(null);
     setForm({ username: "", category: "" });
+    setSaveError(null);
     setDialogOpen(true);
   };
 
   const openEdit = (creator: Creator) => {
     setEditing(creator);
     setForm({ username: creator.username, category: creator.category });
+    setSaveError(null);
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
-      if (editing) {
-        await fetch("/api/creators", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: editing.id, ...form }),
-        });
-      } else {
-        await fetch("/api/creators", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const res = await apiFetch("/api/creators", {
+        method: editing ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editing ? { id: editing.id, ...form } : form),
+      });
+      if (res.status === 401) return;
+      if (!res.ok) {
+        // 409 carries the duplicate message from the API.
+        setSaveError(await readError(res, "Não foi possível salvar"));
+        return;
       }
       setDialogOpen(false);
       loadCreators();
+    } catch {
+      setSaveError("Não foi possível salvar");
     } finally {
       setSaving(false);
     }
@@ -88,18 +98,37 @@ export default function CreatorsPage() {
 
   const handleDelete = async (id: string) => {
     if (!confirm("Delete this creator?")) return;
-    await fetch(`/api/creators?id=${id}`, { method: "DELETE" });
+    try {
+      const res = await apiFetch(`/api/creators?id=${id}`, { method: "DELETE" });
+      if (res.status === 401) return;
+      if (!res.ok) {
+        setPageError(await readError(res, "Não foi possível excluir"));
+        return;
+      }
+    } catch {
+      setPageError("Não foi possível excluir");
+      return;
+    }
     loadCreators();
   };
 
+  const skippedNotice = (n: number) =>
+    n > 0 ? `${n} criador(es) atualizado(s) há menos de 10 minutos não foram buscados de novo.` : null;
+
   const handleRefreshAll = async () => {
     setRefreshing(true);
+    setNotice(null);
+    let skipped = 0;
     try {
-      const response = await fetch("/api/creators/refresh", {
+      const response = await apiFetch("/api/creators/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: [] }),
       });
+      if (!response.ok) {
+        if (response.status !== 401) setPageError(await readError(response, "Não foi possível atualizar"));
+        return;
+      }
 
       const reader = response.body?.getReader();
       if (!reader) return;
@@ -124,6 +153,8 @@ export default function CreatorsPage() {
                 if (c) setRefreshingId(c.id);
               } else if (data.type === "progress" && data.status === "done") {
                 loadCreators();
+              } else if (data.type === "progress" && data.status === "skipped") {
+                skipped++;
               } else if (data.type === "complete") {
                 setRefreshingId(null);
               }
@@ -134,18 +165,24 @@ export default function CreatorsPage() {
     } finally {
       setRefreshing(false);
       setRefreshingId(null);
+      setNotice(skippedNotice(skipped));
       loadCreators();
     }
   };
 
   const handleRefreshOne = async (id: string) => {
     setRefreshingId(id);
+    setNotice(null);
     try {
-      const response = await fetch("/api/creators/refresh", {
+      const response = await apiFetch("/api/creators/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: [id] }),
       });
+      if (!response.ok) {
+        if (response.status !== 401) setPageError(await readError(response, "Não foi possível atualizar"));
+        return;
+      }
 
       const reader = response.body?.getReader();
       if (!reader) return;
@@ -156,6 +193,8 @@ export default function CreatorsPage() {
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
       }
+      buffer += decoder.decode();
+      setNotice(skippedNotice(buffer.includes('"status":"skipped"') ? 1 : 0));
       loadCreators();
     } finally {
       setRefreshingId(null);
@@ -216,6 +255,9 @@ export default function CreatorsPage() {
                     Profile picture, followers, and activity metrics will be scraped automatically from Instagram.
                   </p>
                 )}
+                {saveError && (
+                  <p role="alert" className="text-sm text-red-400">{saveError}</p>
+                )}
                 <Button
                   onClick={handleSave}
                   disabled={saving || !form.username || !form.category}
@@ -235,6 +277,11 @@ export default function CreatorsPage() {
           </Dialog>
         </div>
       </div>
+
+      {pageError && (
+        <p role="alert" className="text-sm text-red-400">{pageError}</p>
+      )}
+      {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
 
       {/* Filters */}
       <div className="flex items-center gap-3">

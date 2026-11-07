@@ -15,7 +15,10 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Play, Loader2, CheckCircle2, XCircle, Terminal, Zap, ChevronDown, ArrowRight, Film, AlertTriangle } from "lucide-react";
-import { usePipeline } from "@/context/pipeline-context";
+import { usePipeline, limitedToMessage } from "@/context/pipeline-context";
+import { QuotaBadge } from "@/components/quota-badge";
+import { fetchList } from "@/lib/client/api";
+import { useMe } from "@/lib/client/use-me";
 import type { Config } from "@/lib/types";
 
 function formatViews(n: number): string {
@@ -35,8 +38,14 @@ export default function RunPage() {
 
   const { running, progress, runPipeline } = usePipeline();
 
+  const me = useMe();
+  const [configsError, setConfigsError] = useState<string | null>(null);
+
   useEffect(() => {
-    fetch("/api/configs").then((r) => r.json()).then(setConfigs);
+    fetchList<Config>("/api/configs").then((r) => {
+      setConfigs(r.items);
+      setConfigsError(r.error);
+    });
   }, []);
 
   useEffect(() => {
@@ -61,6 +70,9 @@ export default function RunPage() {
         <p className="mt-1 text-sm text-muted-foreground">
           Analyze competitor content and generate new video concepts
         </p>
+        <div className="mt-3">
+          <QuotaBadge me={me} />
+        </div>
       </div>
 
       {/* Config Form */}
@@ -83,6 +95,9 @@ export default function RunPage() {
                 ))}
               </SelectContent>
             </Select>
+            {configsError && (
+              <p role="alert" className="mt-1.5 text-xs text-red-400">{configsError}</p>
+            )}
           </div>
 
           <button
@@ -220,6 +235,13 @@ export default function RunPage() {
                   </div>
                 ))}
               </div>
+            )}
+
+            {/* Daily video quota cut the selection short */}
+            {progress.limitedTo !== undefined && (
+              <p className="rounded-xl bg-amber-500/5 border border-amber-500/10 p-3 text-[11px] text-amber-400">
+                {limitedToMessage(progress.limitedTo)}
+              </p>
             )}
 
             {/* Completion CTA */}

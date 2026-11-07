@@ -1,35 +1,44 @@
-import { NextResponse } from "next/server";
-import { readVideos, writeVideos } from "@/lib/csv";
+import { z } from "zod";
+import {
+  authorize,
+  auditIfAdmin,
+  invalidBody,
+  invalidId,
+  notFound,
+  parseId,
+  readJson,
+  withErrors,
+} from "@/lib/api/route-helpers";
+import { listVideos, setVideoStarred } from "@/lib/repo/videos";
+import { toVideo } from "@/lib/api/serializers";
 
-export async function GET(request: Request) {
+const starredSchema = z.object({ starred: z.boolean() });
+
+export const GET = withErrors(async (request) => {
+  const scope = await authorize(request);
+  if ("response" in scope) return scope.response;
   const { searchParams } = new URL(request.url);
-  const configName = searchParams.get("configName");
-  const creator = searchParams.get("creator");
-
-  let videos = readVideos();
-
-  if (configName) videos = videos.filter((v) => v.configName === configName);
-  if (creator) videos = videos.filter((v) => v.creator === creator);
-
-  // Sort by dateAdded desc, then views desc
-  videos.sort((a, b) => {
-    const dateDiff = (b.dateAdded || "").localeCompare(a.dateAdded || "");
-    if (dateDiff !== 0) return dateDiff;
-    return b.views - a.views;
+  const rows = await listVideos(scope.userId, {
+    configName: searchParams.get("configName") || undefined,
+    creator: searchParams.get("creator") || undefined,
   });
+  const list = rows.map(toVideo);
+  // Newest day first, then most viewed (the order the UI has always shown).
+  list.sort((a, b) => b.dateAdded.localeCompare(a.dateAdded) || b.views - a.views);
+  return Response.json(list);
+});
 
-  return NextResponse.json(videos);
-}
-
-export async function PATCH(request: Request) {
-  const { id, starred } = await request.json();
-  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-
-  const videos = readVideos();
-  const video = videos.find((v) => v.id === id);
-  if (!video) return NextResponse.json({ error: "not found" }, { status: 404 });
-
-  video.starred = starred;
-  writeVideos(videos);
-  return NextResponse.json(video);
-}
+export const PATCH = withErrors(async (request) => {
+  const scope = await authorize(request);
+  if ("response" in scope) return scope.response;
+  const body = await readJson(request);
+  if (typeof body !== "object" || body === null) return invalidBody();
+  const id = parseId((body as { id?: unknown }).id);
+  if (!id) return invalidId();
+  const parsed = starredSchema.safeParse(body);
+  if (!parsed.success) return invalidBody();
+  const row = await setVideoStarred(scope.userId, id, parsed.data.starred);
+  if (!row) return notFound();
+  await auditIfAdmin(scope, "update", { resource: "video", id, starred: parsed.data.starred });
+  return Response.json(toVideo(row));
+});

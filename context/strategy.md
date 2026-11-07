@@ -5,7 +5,7 @@
 The tool is fully implemented as a Next.js local app with all core features working:
 - Pipeline: scrape, filter, rank, analyze with Gemini, generate concepts with Claude
 - UI: Dashboard, Videos browser, Run page, Configs CRUD, Creators CRUD
-- Storage: CSV-based local data in `data/`
+- Storage: PostgreSQL, data scoped per account
 
 ## Next Steps
 

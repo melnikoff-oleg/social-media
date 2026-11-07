@@ -1,0 +1,3 @@
+id,username,category,profilePicUrl,followers,reelsCount30d,avgViews30d,lastScrapedAt
+aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa,alice,cat-a,https://x/a.jpg,1000,5,2000,2026-03-06T09:41:47.977Z
+bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb,bob,cat-b,,,,,

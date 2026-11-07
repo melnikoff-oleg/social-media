@@ -19,6 +19,7 @@ import {
 import { Heart, MessageCircle, Film, Sparkles, Search, Star, Play, ArrowUpDown, X, ExternalLink } from "lucide-react";
 import { MarkdownContent } from "@/components/markdown-content";
 import type { Video, Config } from "@/lib/types";
+import { apiFetch, fetchList } from "@/lib/client/api";
 
 function formatViews(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -46,9 +47,14 @@ function VideosContent() {
   const [modalVideo, setModalVideo] = useState<Video | null>(null);
   const [modalSection, setModalSection] = useState<"analysis" | "concepts">("analysis");
 
+  const [loadError, setLoadError] = useState<string | null>(null);
+
   useEffect(() => {
-    fetch("/api/videos").then((r) => r.json()).then(setVideos);
-    fetch("/api/configs").then((r) => r.json()).then(setConfigs);
+    fetchList<Video>("/api/videos").then((r) => {
+      setVideos(r.items);
+      setLoadError(r.error);
+    });
+    fetchList<Config>("/api/configs").then((r) => setConfigs(r.items));
   }, []);
 
   const uniqueCreators = [...new Set(videos.map((v) => v.creator))].sort();
@@ -80,11 +86,18 @@ function VideosContent() {
     setVideos((prev) =>
       prev.map((v) => (v.id === id ? { ...v, starred: newStarred } : v))
     );
-    await fetch("/api/videos", {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ id, starred: newStarred }),
-    });
+    const revert = () =>
+      setVideos((prev) => prev.map((v) => (v.id === id ? { ...v, starred: currentStarred } : v)));
+    try {
+      const res = await apiFetch("/api/videos", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ id, starred: newStarred }),
+      });
+      if (!res.ok) revert();
+    } catch {
+      revert();
+    }
   };
 
   return (
@@ -96,6 +109,10 @@ function VideosContent() {
           Browse analyzed competitor reels with AI insights
         </p>
       </div>
+
+      {loadError && (
+        <p role="alert" className="text-sm text-red-400">{loadError}</p>
+      )}
 
       {/* Filters & Sort */}
       <div className="flex flex-wrap items-center gap-3">
