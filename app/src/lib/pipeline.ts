@@ -51,7 +51,7 @@ const PROVIDER_LABEL: Record<ConceptProvider, string> = {
 export const defaultPipelineDeps: PipelineDeps = {
   scrapeReels,
   async analyzeVideo(videoUrl, analysisInstruction, onStep) {
-    onStep("Downloading");
+    onStep("Baixando");
     const videoResponse = await fetch(videoUrl, {
       signal: AbortSignal.timeout(VIDEO_DOWNLOAD_TIMEOUT_MS),
     });
