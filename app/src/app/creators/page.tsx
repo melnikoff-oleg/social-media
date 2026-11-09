@@ -22,6 +22,7 @@ import {
 import { Plus, Pencil, Trash2, Users, Eye, Film, UserCheck, RefreshCw, Loader2, ExternalLink } from "lucide-react";
 import Link from "next/link";
 import type { Creator } from "@/lib/types";
+import { apiFetch, fetchList, readError } from "@/lib/client/api";
 
 function formatNumber(n: number): string {
   if (n >= 1_000_000) return (n / 1_000_000).toFixed(1).replace(/\.0$/, "") + "M";
@@ -39,8 +40,14 @@ export default function CreatorsPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [refreshingId, setRefreshingId] = useState<string | null>(null);
 
-  const loadCreators = () => {
-    fetch("/api/creators").then((r) => r.json()).then(setCreators);
+  const [pageError, setPageError] = useState<string | null>(null);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [saveError, setSaveError] = useState<string | null>(null);
+
+  const loadCreators = async () => {
+    const r = await fetchList<Creator>("/api/creators");
+    setCreators(r.items);
+    setPageError(r.error);
   };
 
   useEffect(() => { loadCreators(); }, []);
@@ -54,52 +61,74 @@ export default function CreatorsPage() {
   const openNew = () => {
     setEditing(null);
     setForm({ username: "", category: "" });
+    setSaveError(null);
     setDialogOpen(true);
   };
 
   const openEdit = (creator: Creator) => {
     setEditing(creator);
     setForm({ username: creator.username, category: creator.category });
+    setSaveError(null);
     setDialogOpen(true);
   };
 
   const handleSave = async () => {
     setSaving(true);
+    setSaveError(null);
     try {
-      if (editing) {
-        await fetch("/api/creators", {
-          method: "PUT",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ id: editing.id, ...form }),
-        });
-      } else {
-        await fetch("/api/creators", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(form),
-        });
+      const res = await apiFetch("/api/creators", {
+        method: editing ? "PUT" : "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(editing ? { id: editing.id, ...form } : form),
+      });
+      if (res.status === 401) return;
+      if (!res.ok) {
+        // 409 carries the duplicate message from the API.
+        setSaveError(await readError(res, "Não foi possível salvar"));
+        return;
       }
       setDialogOpen(false);
       loadCreators();
+    } catch {
+      setSaveError("Não foi possível salvar");
     } finally {
       setSaving(false);
     }
   };
 
   const handleDelete = async (id: string) => {
-    if (!confirm("Delete this creator?")) return;
-    await fetch(`/api/creators?id=${id}`, { method: "DELETE" });
+    if (!confirm("Excluir este criador?")) return;
+    try {
+      const res = await apiFetch(`/api/creators?id=${id}`, { method: "DELETE" });
+      if (res.status === 401) return;
+      if (!res.ok) {
+        setPageError(await readError(res, "Não foi possível excluir"));
+        return;
+      }
+    } catch {
+      setPageError("Não foi possível excluir");
+      return;
+    }
     loadCreators();
   };
 
+  const skippedNotice = (n: number) =>
+    n > 0 ? `${n} criador(es) atualizado(s) há menos de 10 minutos não foram buscados de novo.` : null;
+
   const handleRefreshAll = async () => {
     setRefreshing(true);
+    setNotice(null);
+    let skipped = 0;
     try {
-      const response = await fetch("/api/creators/refresh", {
+      const response = await apiFetch("/api/creators/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: [] }),
       });
+      if (!response.ok) {
+        if (response.status !== 401) setPageError(await readError(response, "Não foi possível atualizar"));
+        return;
+      }
 
       const reader = response.body?.getReader();
       if (!reader) return;
@@ -124,6 +153,8 @@ export default function CreatorsPage() {
                 if (c) setRefreshingId(c.id);
               } else if (data.type === "progress" && data.status === "done") {
                 loadCreators();
+              } else if (data.type === "progress" && data.status === "skipped") {
+                skipped++;
               } else if (data.type === "complete") {
                 setRefreshingId(null);
               }
@@ -134,18 +165,24 @@ export default function CreatorsPage() {
     } finally {
       setRefreshing(false);
       setRefreshingId(null);
+      setNotice(skippedNotice(skipped));
       loadCreators();
     }
   };
 
   const handleRefreshOne = async (id: string) => {
     setRefreshingId(id);
+    setNotice(null);
     try {
-      const response = await fetch("/api/creators/refresh", {
+      const response = await apiFetch("/api/creators/refresh", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ ids: [id] }),
       });
+      if (!response.ok) {
+        if (response.status !== 401) setPageError(await readError(response, "Não foi possível atualizar"));
+        return;
+      }
 
       const reader = response.body?.getReader();
       if (!reader) return;
@@ -156,6 +193,8 @@ export default function CreatorsPage() {
         if (done) break;
         buffer += decoder.decode(value, { stream: true });
       }
+      buffer += decoder.decode();
+      setNotice(skippedNotice(buffer.includes('"status":"skipped"') ? 1 : 0));
       loadCreators();
     } finally {
       setRefreshingId(null);
@@ -166,9 +205,9 @@ export default function CreatorsPage() {
     <div className="space-y-8">
       <div className="flex items-end justify-between">
         <div>
-          <h1 className="text-3xl font-bold tracking-tight">Creators</h1>
+          <h1 className="text-3xl font-bold tracking-tight">Criadores</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            Manage competitor Instagram accounts to track
+            Gerencie as contas de concorrentes no Instagram que você acompanha
           </p>
         </div>
         <div className="flex gap-2">
@@ -179,42 +218,45 @@ export default function CreatorsPage() {
             className="rounded-xl glass border-white/[0.08] gap-1.5 text-xs"
           >
             {refreshing ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
-            Refresh All
+            Atualizar todos
           </Button>
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
               <Button onClick={openNew} className="rounded-xl bg-gradient-to-r from-purple-500 to-indigo-600 hover:from-purple-600 hover:to-indigo-700 border-0 gap-1.5">
                 <Plus className="h-4 w-4" />
-                Add Creator
+                Adicionar criador
               </Button>
             </DialogTrigger>
             <DialogContent className="glass-strong rounded-2xl border-white/[0.08]">
               <DialogHeader>
-                <DialogTitle>{editing ? "Edit Creator" : "Add Creator"}</DialogTitle>
+                <DialogTitle>{editing ? "Editar criador" : "Adicionar criador"}</DialogTitle>
               </DialogHeader>
               <div className="space-y-5 pt-2">
                 <div>
-                  <Label className="text-xs text-muted-foreground">Instagram Username</Label>
+                  <Label className="text-xs text-muted-foreground">Usuário do Instagram</Label>
                   <Input
                     value={form.username}
                     onChange={(e) => setForm({ ...form, username: e.target.value })}
-                    placeholder="e.g. marcel.remus"
+                    placeholder="ex.: marcel.remus"
                     className="mt-1.5 rounded-xl glass border-white/[0.08] h-11"
                   />
                 </div>
                 <div>
-                  <Label className="text-xs text-muted-foreground">Category</Label>
+                  <Label className="text-xs text-muted-foreground">Categoria</Label>
                   <Input
                     value={form.category}
                     onChange={(e) => setForm({ ...form, category: e.target.value })}
-                    placeholder="e.g. dubai-real-estate"
+                    placeholder="ex.: imoveis-dubai"
                     className="mt-1.5 rounded-xl glass border-white/[0.08] h-11"
                   />
                 </div>
                 {!editing && (
                   <p className="text-[11px] text-muted-foreground">
-                    Profile picture, followers, and activity metrics will be scraped automatically from Instagram.
+                    A foto de perfil, os seguidores e as métricas de atividade serão buscados automaticamente no Instagram.
                   </p>
+                )}
+                {saveError && (
+                  <p role="alert" className="text-sm text-red-400">{saveError}</p>
                 )}
                 <Button
                   onClick={handleSave}
@@ -224,10 +266,10 @@ export default function CreatorsPage() {
                   {saving ? (
                     <>
                       <Loader2 className="h-4 w-4 animate-spin" />
-                      {editing ? "Saving..." : "Adding & scraping..."}
+                      {editing ? "Salvando..." : "Adicionando e buscando dados..."}
                     </>
                   ) : (
-                    editing ? "Save Changes" : "Add Creator"
+                    editing ? "Salvar alterações" : "Adicionar criador"
                   )}
                 </Button>
               </div>
@@ -236,21 +278,26 @@ export default function CreatorsPage() {
         </div>
       </div>
 
+      {pageError && (
+        <p role="alert" className="text-sm text-red-400">{pageError}</p>
+      )}
+      {notice && <p className="text-sm text-muted-foreground">{notice}</p>}
+
       {/* Filters */}
       <div className="flex items-center gap-3">
         <Select value={filterCategory} onValueChange={setFilterCategory}>
           <SelectTrigger className="w-[220px] rounded-xl glass border-white/[0.08] h-10">
-            <SelectValue placeholder="Filter by category" />
+            <SelectValue placeholder="Filtrar por categoria" />
           </SelectTrigger>
           <SelectContent>
-            <SelectItem value="all">All Categories</SelectItem>
+            <SelectItem value="all">Todas as categorias</SelectItem>
             {uniqueCategories.map((c) => (
               <SelectItem key={c} value={c}>{c}</SelectItem>
             ))}
           </SelectContent>
         </Select>
         <Badge variant="secondary" className="rounded-lg px-3 py-1.5 text-xs bg-white/[0.05] border border-white/[0.08]">
-          {filtered.length} creators
+          {filtered.length} criadores
         </Badge>
       </div>
 
@@ -328,7 +375,7 @@ export default function CreatorsPage() {
                   <div className="rounded-xl bg-black/20 border border-white/[0.04] p-2.5 text-center">
                     <UserCheck className="mx-auto h-3.5 w-3.5 text-blue-400 mb-1" />
                     <p className="text-sm font-bold">{formatNumber(creator.followers)}</p>
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Followers</p>
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Seguidores</p>
                   </div>
                   <div className="rounded-xl bg-black/20 border border-white/[0.04] p-2.5 text-center">
                     <Film className="mx-auto h-3.5 w-3.5 text-purple-400 mb-1" />
@@ -338,13 +385,13 @@ export default function CreatorsPage() {
                   <div className="rounded-xl bg-black/20 border border-white/[0.04] p-2.5 text-center">
                     <Eye className="mx-auto h-3.5 w-3.5 text-emerald-400 mb-1" />
                     <p className="text-sm font-bold">{formatNumber(creator.avgViews30d)}</p>
-                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Avg Views</p>
+                    <p className="text-[9px] text-muted-foreground uppercase tracking-wider">Média de views</p>
                   </div>
                 </div>
               ) : (
                 <div className="mt-4 rounded-xl bg-black/20 border border-white/[0.04] p-3 text-center">
                   <p className="text-[11px] text-muted-foreground">
-                    No stats yet &mdash; click <RefreshCw className="inline h-3 w-3" /> to scrape
+                    Sem estatísticas ainda &mdash; clique em <RefreshCw className="inline h-3 w-3" /> para buscar
                   </p>
                 </div>
               )}
@@ -353,14 +400,14 @@ export default function CreatorsPage() {
               <div className="mt-3 flex items-center justify-between">
                 {creator.lastScrapedAt ? (
                   <p className="text-[10px] text-muted-foreground/60">
-                    Scraped {new Date(creator.lastScrapedAt).toLocaleDateString()}
+                    Atualizado em {new Date(creator.lastScrapedAt).toLocaleDateString("pt-BR")}
                   </p>
                 ) : <span />}
                 <Link
                   href={`/videos?creator=${creator.username}`}
                   className="inline-flex items-center gap-1 text-[11px] text-purple-400 hover:text-purple-300 transition-colors"
                 >
-                  View videos <ExternalLink className="h-3 w-3" />
+                  Ver vídeos <ExternalLink className="h-3 w-3" />
                 </Link>
               </div>
             </div>
@@ -370,8 +417,8 @@ export default function CreatorsPage() {
         {filtered.length === 0 && (
           <div className="col-span-full glass rounded-2xl p-12 text-center">
             <Users className="mx-auto h-10 w-10 text-muted-foreground/30" />
-            <h3 className="mt-4 font-semibold">No creators yet</h3>
-            <p className="mt-1 text-sm text-muted-foreground">Add one to get started.</p>
+            <h3 className="mt-4 font-semibold">Nenhum criador ainda</h3>
+            <p className="mt-1 text-sm text-muted-foreground">Adicione um para começar.</p>
           </div>
         )}
       </div>

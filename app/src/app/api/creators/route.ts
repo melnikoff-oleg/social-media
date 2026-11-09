@@ -1,76 +1,100 @@
-import { NextResponse } from "next/server";
-import { v4 as uuid } from "uuid";
-import { readCreators, writeCreators } from "@/lib/csv";
+import {
+  authorize,
+  auditIfAdmin,
+  duplicate,
+  invalidBody,
+  invalidId,
+  jsonError,
+  notFound,
+  parseId,
+  readJson,
+  withErrors,
+} from "@/lib/api/route-helpers";
+import {
+  createCreator,
+  creatorInputSchema,
+  deleteCreator,
+  listCreators,
+  MAX_CREATORS_PER_ACCOUNT,
+  updateCreator,
+} from "@/lib/repo/creators";
 import { scrapeCreatorStats } from "@/lib/apify";
-import type { Creator } from "@/lib/types";
+import { toCreator } from "@/lib/api/serializers";
+import type { z } from "zod";
 
-export async function GET(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const category = searchParams.get("category");
-  let creators = readCreators();
-  if (category) creators = creators.filter((c) => c.category === category);
-  return NextResponse.json(creators);
+// Clients may only set the handle and the category; stats come from scraping.
+const creatorBodySchema = creatorInputSchema.pick({ username: true, category: true });
+const creatorUpdateSchema = creatorBodySchema.partial();
+
+/** 400 with "usuário inválido" when the handle is what failed, the generic 400 otherwise. */
+function badBody(error: z.ZodError): Response {
+  return error.issues.some((i) => i.path[0] === "username")
+    ? jsonError("usuário inválido", 400)
+    : invalidBody();
 }
 
-export async function POST(request: Request) {
-  const body = await request.json();
-  const creators = readCreators();
+export const GET = withErrors(async (request) => {
+  const scope = await authorize(request);
+  if ("response" in scope) return scope.response;
+  const category = new URL(request.url).searchParams.get("category") || undefined;
+  const rows = await listCreators(scope.userId, category);
+  return Response.json(rows.map(toCreator));
+});
 
-  const newCreator: Creator = {
-    id: uuid(),
-    username: body.username,
-    category: body.category,
-    profilePicUrl: "",
-    followers: 0,
-    reelsCount30d: 0,
-    avgViews30d: 0,
-    lastScrapedAt: "",
-  };
+export const POST = withErrors(async (request) => {
+  const scope = await authorize(request);
+  if ("response" in scope) return scope.response;
+  const parsed = creatorBodySchema.safeParse(await readJson(request));
+  if (!parsed.success) return badBody(parsed.error);
+  const created = await createCreator(scope.userId, parsed.data);
+  if ("error" in created) {
+    return created.error === "limit"
+      ? jsonError(`Limite de ${MAX_CREATORS_PER_ACCOUNT} criadores por conta atingido`, 422)
+      : duplicate();
+  }
+  await auditIfAdmin(scope, "create", { resource: "creator", id: created.id });
 
-  // Scrape stats in the background — save immediately, then update
-  creators.push(newCreator);
-  writeCreators(creators);
-
-  // Try to scrape stats (non-blocking for the response)
+  // Saved already; enrich with stats when the scraper answers, otherwise return as is.
   try {
-    const stats = await scrapeCreatorStats(body.username);
-    const updated = readCreators();
-    const idx = updated.findIndex((c) => c.id === newCreator.id);
-    if (idx !== -1) {
-      updated[idx] = {
-        ...updated[idx],
-        profilePicUrl: stats.profilePicUrl,
-        followers: stats.followers,
-        reelsCount30d: stats.reelsCount30d,
-        avgViews30d: stats.avgViews30d,
-        lastScrapedAt: new Date().toISOString(),
-      };
-      writeCreators(updated);
-      return NextResponse.json(updated[idx], { status: 201 });
+    const stats = await scrapeCreatorStats(created.username);
+    const updated = await updateCreator(scope.userId, created.id, {
+      profilePicUrl: stats.profilePicUrl,
+      followers: stats.followers,
+      reelsCount30d: stats.reelsCount30d,
+      avgViews30d: stats.avgViews30d,
+      lastScrapedAt: new Date(),
+    });
+    if (updated && !("error" in updated)) {
+      return Response.json(toCreator(updated), { status: 201 });
     }
   } catch (err) {
-    console.error(`Failed to scrape stats for @${body.username}:`, err);
+    console.error(`Failed to scrape stats for @${created.username}:`, err);
   }
+  return Response.json(toCreator(created), { status: 201 });
+});
 
-  return NextResponse.json(newCreator, { status: 201 });
-}
+export const PUT = withErrors(async (request) => {
+  const scope = await authorize(request);
+  if ("response" in scope) return scope.response;
+  const body = await readJson(request);
+  if (typeof body !== "object" || body === null) return invalidBody();
+  const id = parseId((body as { id?: unknown }).id);
+  if (!id) return invalidId();
+  const parsed = creatorUpdateSchema.safeParse(body);
+  if (!parsed.success) return badBody(parsed.error);
+  const result = await updateCreator(scope.userId, id, parsed.data);
+  if (result === undefined) return notFound();
+  if ("error" in result) return duplicate();
+  await auditIfAdmin(scope, "update", { resource: "creator", id });
+  return Response.json(toCreator(result));
+});
 
-export async function PUT(request: Request) {
-  const body = await request.json();
-  const creators = readCreators();
-  const index = creators.findIndex((c) => c.id === body.id);
-  if (index === -1) return NextResponse.json({ error: "Not found" }, { status: 404 });
-  creators[index] = { ...creators[index], ...body };
-  writeCreators(creators);
-  return NextResponse.json(creators[index]);
-}
-
-export async function DELETE(request: Request) {
-  const { searchParams } = new URL(request.url);
-  const id = searchParams.get("id");
-  if (!id) return NextResponse.json({ error: "id required" }, { status: 400 });
-  const creators = readCreators();
-  const filtered = creators.filter((c) => c.id !== id);
-  writeCreators(filtered);
-  return NextResponse.json({ success: true });
-}
+export const DELETE = withErrors(async (request) => {
+  const scope = await authorize(request);
+  if ("response" in scope) return scope.response;
+  const id = parseId(new URL(request.url).searchParams.get("id"));
+  if (!id) return invalidId();
+  if (!(await deleteCreator(scope.userId, id))) return notFound();
+  await auditIfAdmin(scope, "delete", { resource: "creator", id });
+  return Response.json({ success: true });
+});

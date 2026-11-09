@@ -1,12 +1,39 @@
 "use client";
 
 import { createContext, useContext, useState, useRef, useCallback } from "react";
-import type { PipelineProgress } from "@/lib/types";
+import type { ConceptProvider, PipelineProgress } from "@/lib/types";
+import { readErrorCode, redirectToLogin } from "@/lib/client/api";
+
+export function limitedToMessage(n: number): string {
+  return `Limite diário de vídeos: analisando ${n} vídeos hoje`;
+}
+
+const failedProgress: PipelineProgress = {
+  status: "error",
+  phase: "done",
+  activeTasks: [],
+  creatorsCompleted: 0,
+  creatorsTotal: 0,
+  creatorsScraped: 0,
+  videosAnalyzed: 0,
+  videosTotal: 0,
+  errors: [],
+  log: [],
+};
+
+/** What the Run page sends; `provider` picks the concept-generation model. */
+export interface RunParams {
+  configName: string;
+  maxVideos: number;
+  topK: number;
+  nDays: number;
+  provider: ConceptProvider;
+}
 
 interface PipelineContextValue {
   running: boolean;
   progress: PipelineProgress | null;
-  runPipeline: (params: { configName: string; maxVideos: number; topK: number; nDays: number }) => void;
+  runPipeline: (params: RunParams) => void;
 }
 
 const PipelineContext = createContext<PipelineContextValue | null>(null);
@@ -16,7 +43,7 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
   const [progress, setProgress] = useState<PipelineProgress | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const runPipeline = useCallback(async (params: { configName: string; maxVideos: number; topK: number; nDays: number }) => {
+  const runPipeline = useCallback(async (params: RunParams) => {
     if (running) return;
     setRunning(true);
     setProgress(null);
@@ -27,9 +54,31 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
       const response = await fetch("/api/pipeline", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(params),
+        body: JSON.stringify({
+          configName: params.configName,
+          maxVideos: params.maxVideos,
+          topK: params.topK,
+          nDays: params.nDays,
+          provider: params.provider,
+        }),
         signal: abortRef.current.signal,
       });
+
+      if (!response.ok) {
+        if (response.status === 401) {
+          redirectToLogin();
+          return;
+        }
+        const code = await readErrorCode(response);
+        let message = "Não foi possível iniciar a execução";
+        if (response.status === 409) message = "Já existe uma execução em andamento";
+        else if (response.status === 429 && code === "runs_exhausted")
+          message = "Você atingiu o limite de execuções de hoje";
+        else if (response.status === 429 && code === "videos_exhausted")
+          message = limitedToMessage(0);
+        setProgress({ ...failedProgress, errors: [message] });
+        return;
+      }
 
       const reader = response.body?.getReader();
       if (!reader) return;
@@ -61,7 +110,7 @@ export function PipelineProvider({ children }: { children: React.ReactNode }) {
       setProgress((prev) => ({
         ...(prev || { phase: "done" as const, activeTasks: [], creatorsCompleted: 0, creatorsTotal: 0, creatorsScraped: 0, videosAnalyzed: 0, videosTotal: 0, log: [] }),
         status: "error" as const,
-        errors: [err instanceof Error ? err.message : "Unknown error"],
+        errors: [err instanceof Error ? err.message : "Erro desconhecido"],
       }));
     } finally {
       setRunning(false);

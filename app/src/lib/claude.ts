@@ -1,5 +1,8 @@
 import Anthropic from "@anthropic-ai/sdk";
 
+/** Timeout for one concept-generation request. */
+const CLAUDE_TIMEOUT_MS = 60_000;
+
 export async function generateNewConcepts(
   videoAnalysis: string,
   newConceptsPrompt: string
@@ -34,7 +37,7 @@ ${newConceptsPrompt}
 # BEGIN YOUR WORK`,
       },
     ],
-  });
+  }, { signal: AbortSignal.timeout(CLAUDE_TIMEOUT_MS) });
 
   const block = message.content[0];
   return block.type === "text" ? block.text : "";

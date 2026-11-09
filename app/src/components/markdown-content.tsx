@@ -76,7 +76,7 @@ interface MarkdownContentProps {
 export function MarkdownContent({ content, variant = "analysis" }: MarkdownContentProps) {
   if (!content) {
     return (
-      <p className="text-sm text-muted-foreground italic">No content available.</p>
+      <p className="text-sm text-muted-foreground italic">Nenhum conteúdo disponível.</p>
     );
   }
 

@@ -21,6 +21,9 @@ export interface CreatorStats {
   avgViews30d: number;
 }
 
+/** Per-request timeout for Apify calls. */
+const APIFY_TIMEOUT_MS = 300_000;
+
 function getToken(): string {
   const token = process.env.APIFY_API_TOKEN;
   if (!token) throw new Error("APIFY_API_TOKEN not set");
@@ -43,6 +46,7 @@ export async function scrapeReels(
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(APIFY_TIMEOUT_MS),
       body: JSON.stringify({
         addParentData: false,
         directUrls: [`https://www.instagram.com/${username}/`],
@@ -74,6 +78,7 @@ export async function scrapeCreatorStats(username: string): Promise<CreatorStats
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(APIFY_TIMEOUT_MS),
       body: JSON.stringify({
         directUrls: [`https://www.instagram.com/${username}/`],
         resultsType: "details",
@@ -102,6 +107,7 @@ export async function scrapeCreatorStats(username: string): Promise<CreatorStats
     {
       method: "POST",
       headers: { "Content-Type": "application/json" },
+      signal: AbortSignal.timeout(APIFY_TIMEOUT_MS),
       body: JSON.stringify({
         directUrls: [`https://www.instagram.com/${username}/`],
         resultsType: "stories",

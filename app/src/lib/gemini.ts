@@ -14,6 +14,9 @@ const GEMINI_UPLOAD_URL = "https://generativelanguage.googleapis.com/upload/v1be
 const GEMINI_MODEL = process.env.GEMINI_MODEL || "gemini-2.5-flash";
 const GEMINI_GENERATE_URL = `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI_MODEL}:generateContent`;
 
+/** Per-request timeout for Gemini upload, status polling and analysis. */
+const GEMINI_TIMEOUT_MS = 300_000;
+
 function getApiKey(): string {
   const key = process.env.GEMINI_API_KEY;
   if (!key) throw new Error("GEMINI_API_KEY not set");
@@ -35,6 +38,7 @@ export async function uploadVideo(
       "Content-Type": mimeType,
     },
     body: new Uint8Array(videoBuffer),
+    signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
   });
 
   if (!response.ok) {
@@ -59,7 +63,8 @@ async function waitForFileActive(fileName: string, maxWaitMs = 120000): Promise<
 
   while (Date.now() - start < maxWaitMs) {
     const response = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${key}`
+      `https://generativelanguage.googleapis.com/v1beta/${fileName}?key=${key}`,
+      { signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS) }
     );
 
     if (!response.ok) {
@@ -93,6 +98,7 @@ export async function analyzeVideo(
       const response = await fetch(`${GEMINI_GENERATE_URL}?key=${key}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
+        signal: AbortSignal.timeout(GEMINI_TIMEOUT_MS),
         body: JSON.stringify({
           contents: [
             {
